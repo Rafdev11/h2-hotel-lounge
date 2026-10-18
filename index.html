@@ -30,7 +30,55 @@ function message(id,text,type='error'){$(id).innerHTML='';if(text){const d=docum
 function dates(){const a=$('checkin').value,b=$('checkout').value;if(!a||!b)return 0;return Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000);}
 function calc(){const n=dates();$('rate').textContent=money(PRICES[$('room').value]);$('nights').textContent=n>0?n:'—';$('total').textContent=n>0?money(PRICES[$('room').value]*n):'—';}
 function pickRoom(room){$('room').value=room;calc();$('booking').scrollIntoView({behavior:'smooth'});}
-function callServer(fn,args,cb){if(!window.google||!google.script||!google.script.run){cb({ok:false,error:'Preview mode only. Open the deployed Apps Script web app to make real test reservations.'});return;}google.script.run.withSuccessHandler(cb).withFailureHandler(e=>cb({ok:false,error:e.message||String(e)}))[fn](...args);}
+
+async function callServer(fn, args, cb) {
+  const API = "https://h2-hotel-booking-api.segunbackup8.workers.dev/api";
+
+  try {
+    let response;
+
+    if (fn === "websiteCreateBooking") {
+      response = await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          ...args[0]
+        })
+      });
+    } else if (fn === "websiteClaimPayment") {
+      response = await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "claimPayment",
+          ref: args[0],
+          token: args[1]
+        })
+      });
+    } else if (fn === "websiteBookingStatus") {
+      const params = new URLSearchParams({
+        action: "status",
+        ref: args[0],
+        token: args[1]
+      });
+
+      response = await fetch(API + "?" + params.toString());
+    } else {
+      cb({ ok: false, error: "Unknown booking action" });
+      return;
+    }
+
+    const result = await response.json();
+    cb(result);
+  } catch (error) {
+    cb({
+      ok: false,
+      error: "Connection problem. Please try again."
+    });
+  }
+}
+
 function saveBooking(obj){current={ref:obj.ref,token:obj.token};try{localStorage.setItem('h2-reservation',JSON.stringify(current));}catch(e){}showSaved();}
 function showSaved(){const yes=!!(current&&current.ref&&current.token);$('savedBooking').classList.toggle('hidden',!yes);$('emptySaved').classList.toggle('hidden',yes);if(yes){$('savedRef').textContent=current.ref;}}
 function forgetBooking(){current=null;try{localStorage.removeItem('h2-reservation');}catch(e){}showSaved();$('paymentPanel').classList.add('hidden');$('bookingForm').classList.remove('hidden');}
